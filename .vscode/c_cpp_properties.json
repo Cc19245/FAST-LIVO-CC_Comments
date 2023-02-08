@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/devel/include/**",
+        "/home/cc/slam_dev/hardware_driver/livox_driver/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/src/FAST-LIVO-CC_Comments/FAST-LIVO/include/**",
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/src/FAST-LIVO-CC_Comments/rpg_vikit/vikit_common/include/**",
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/src/FAST-LIVO-CC_Comments/rpg_vikit/vikit_ros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

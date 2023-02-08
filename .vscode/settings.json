@@ -1,0 +1,176 @@
+{
+    "doxdocgen.generic.paramTemplate": "@param[in] {param} ",
+	"todo-tree.highlights.defaultHighlight": {
+	"icon": "alert",
+	"type": "text",
+	// "foreground": "red",
+	"iconColour": "green"
+	},
+	"todo-tree.general.tags": [
+	"//TODO",
+	"?",
+	"!",
+	" Step ",
+	"//;",    // comments by CC
+    "#;",    // comments by CC
+	"//Done"  // already read done
+	],
+	"todo-tree.highlights.customHighlight": {
+	"//TODO":{
+		"background": "#a010109f",
+		"foreground": "#cecaca",
+		"icon": "check",
+		// "rulerColour": "yellow",
+		"iconColour": "yellow"   // 在左侧的todo tree查看的时候有对应的图标，这个图标只有特定的几种，所以名字也是确定的
+	},
+	"//Done": {
+	// 关于配色的色号：http://xh.5156edu.com/page/z1015m9220j18754.html
+	// 这个色号叫做html颜色代码，注意写颜色代码的时候一定别忘了前面的 # 
+	"foreground": "#FF4500",     // 前景色，就是字体的颜色
+	"iconColour": "#FF4500",    // 图标的颜色
+	"type": "text-and-comment",  
+	},
+	"//;": {
+	"foreground": "#DAA520",
+	"iconColour": "#FFA500",
+	"type": "text-and-comment",
+	},
+    "#;": {
+        "foreground": "#DAA520",
+        "iconColour": "#FFA500",
+        "type": "text-and-comment",
+        },
+	" Step ": {
+	"foreground": "#7CFC00",
+	"iconColour": "#7CFC00",
+	"type": "text-and-comment",
+	"hideFromTree": true
+	},
+	"?": {
+	"foreground": "#35ee35",
+	"icon": "beaker",
+	"iconColour": "#35ee35",
+	"type": "text-and-comment"
+	},
+	"!": {
+	"foreground": "red",
+	"icon": "issue-opened",
+	"iconColour": "red",
+	"type": "text-and-comment"
+	}
+	},
+	"todo-tree.general.revealBehaviour": "highlight todo",
+	"todo-tree.tree.showCountsInTree": true,
+	"todo-tree.filtering.excludeGlobs":[
+	"**/*.txt",
+	"**/*.md"
+	],
+	"files.associations": {
+		"*.cc": "cpp",
+		"vector": "cpp",
+		"mutex": "cpp",
+		"list": "cpp",
+		"xtree": "cpp",
+		"map": "cpp",
+		"algorithm": "cpp",
+		"bitset": "cpp",
+		"cctype": "cpp",
+		"chrono": "cpp",
+		"cmath": "cpp",
+		"concepts": "cpp",
+		"cstdarg": "cpp",
+		"cstddef": "cpp",
+		"cstdint": "cpp",
+		"cstdio": "cpp",
+		"cstdlib": "cpp",
+		"cstring": "cpp",
+		"ctime": "cpp",
+		"cwchar": "cpp",
+		"deque": "cpp",
+		"exception": "cpp",
+		"fstream": "cpp",
+		"initializer_list": "cpp",
+		"iomanip": "cpp",
+		"ios": "cpp",
+		"iosfwd": "cpp",
+		"iostream": "cpp",
+		"istream": "cpp",
+		"iterator": "cpp",
+		"limits": "cpp",
+		"memory": "cpp",
+		"new": "cpp",
+		"numeric": "cpp",
+		"ostream": "cpp",
+		"queue": "cpp",
+		"ratio": "cpp",
+		"set": "cpp",
+		"sstream": "cpp",
+		"stack": "cpp",
+		"stdexcept": "cpp",
+		"streambuf": "cpp",
+		"string": "cpp",
+		"system_error": "cpp",
+		"thread": "cpp",
+		"tuple": "cpp",
+		"type_traits": "cpp",
+		"typeinfo": "cpp",
+		"unordered_map": "cpp",
+		"utility": "cpp",
+		"xfacet": "cpp",
+		"xhash": "cpp",
+		"xiosbase": "cpp",
+		"xlocale": "cpp",
+		"xlocinfo": "cpp",
+		"xlocmon": "cpp",
+		"xlocnum": "cpp",
+		"xloctime": "cpp",
+		"xmemory": "cpp",
+		"xstddef": "cpp",
+		"xstring": "cpp",
+		"xtr1common": "cpp",
+		"xutility": "cpp",
+		"*.tcc": "cpp",
+		"clocale": "cpp",
+		"csignal": "cpp",
+		"cwctype": "cpp",
+		"array": "cpp",
+		"atomic": "cpp",
+		"strstream": "cpp",
+		"complex": "cpp",
+		"condition_variable": "cpp",
+		"any": "cpp",
+		"functional": "cpp",
+		"optional": "cpp",
+		"string_view": "cpp",
+		"cfenv": "cpp",
+		"cinttypes": "cpp",
+		"typeindex": "cpp",
+		"valarray": "cpp",
+		"unordered_set": "cpp",
+		"memory_resource": "cpp",
+		"random": "cpp",
+		"jacobi": "cpp",
+		"core": "cpp",
+		"*.ipp": "cpp",
+		"parameters.h": "c",
+		"tic_toc.h": "c",
+		"feature_manager.h": "c",
+		"initial_alignment.h": "c",
+		"hash_map": "cpp",
+		"hash_set": "cpp",
+		"eigen.hpp": "c",
+		"dense": "c",
+		"ros.h": "c"
+	},
+    "ros.distro": "melodic",
+    "python.autoComplete.extraPaths": [
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/devel/lib/python2.7/dist-packages",
+        "/home/cc/slam_dev/hardware_driver/livox_driver/devel/lib/python2.7/dist-packages",
+        "/opt/ros/melodic/lib/python2.7/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/cc/slamWorkspace/myLearn/FAST-LIVO-CC_Comments-ws/devel/lib/python2.7/dist-packages",
+        "/home/cc/slam_dev/hardware_driver/livox_driver/devel/lib/python2.7/dist-packages",
+        "/opt/ros/melodic/lib/python2.7/dist-packages"
+    ]
+}
