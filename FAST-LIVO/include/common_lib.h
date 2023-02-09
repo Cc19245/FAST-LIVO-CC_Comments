@@ -157,11 +157,12 @@ struct MeasureGroup
     };
 };
 
+//; 同步的数据结构
 struct LidarMeasureGroup
 {
-    double lidar_beg_time;
+    double lidar_beg_time;   //; 一帧lidar开始的绝对时间戳
     double last_update_time;
-    PointCloudXYZI::Ptr lidar;
+    PointCloudXYZI::Ptr lidar;   //; lidar点云
     std::deque<struct MeasureGroup> measures;
     bool is_lidar_end;
     int lidar_scan_index_now;
@@ -191,11 +192,6 @@ struct LidarMeasureGroup
         std::cout<<"lidar_.points.size(): "<<this->lidar->points.size()<<endl<<endl;
     };
 };
-
-// struct Frames
-// {
-//     vector<cv::Mat> imgs;
-// };
 
 // 稀疏地图类
 struct SparseMap
