@@ -142,23 +142,34 @@ namespace lidar_selection
         return true;
     }
 
+    /**
+     * @brief 传入相机系的原点，计算当前点Point和相机系观测的方向最近的那个点
+     * 
+     * @param[in] framepos 
+     * @param[in] ftr 
+     * @param[in] cur_px  没有用到
+     * @return true 
+     * @return false 
+     */
     bool Point::getCloseViewObs(const Vector3d &framepos, FeaturePtr &ftr, const Vector2d &cur_px) const
     {
         // TODO: get frame with same point of view AND same pyramid level!
+        //; 如果当前点没有观测的patch，那么直接退出
         if (obs_.size() <= 0)
             return false;
 
-        Vector3d obs_dir(framepos - pos_);
+        Vector3d obs_dir(framepos - pos_);   //; 当前point在相机系下的观测方向，注意仍然是在world系下表示的
         obs_dir.normalize();
         auto min_it = obs_.begin();
         double min_cos_angle = 0;
 
         for (auto it = obs_.begin(), ite = obs_.end(); it != ite; ++it)
         {
-            Vector3d dir((*it)->T_f_w_.inverse().translation() - pos_);
+            //; (*it)->T_f_w_.inverse().translation()是这个观测的patch的图像的相机系在world系下的位置
+            Vector3d dir((*it)->T_f_w_.inverse().translation() - pos_);  //; 这个patch对地图点的观测方向
             dir.normalize();
             double cos_angle = obs_dir.dot(dir);
-            if (cos_angle > min_cos_angle)
+            if (cos_angle > min_cos_angle)  // 寻找最近的观测角度的patch
             {
                 min_cos_angle = cos_angle;
                 min_it = it;
@@ -175,6 +186,7 @@ namespace lidar_selection
         //   return false;
         // }
 
+        //; 如果观测角度 > 60度，那么也不要这个观测
         if (min_cos_angle < 0.5) // assume that observations larger than 60° are useless 0.5
         {
             // ROS_ERROR("The obseved angle is larger than 60°.");
@@ -183,6 +195,7 @@ namespace lidar_selection
 
         return true;
     }
+
 
     bool Point::getCloseViewObs_test(const Vector3d &framepos, FeaturePtr &ftr, const Vector2d &cur_px,
                                      double &min_cos_angle) const

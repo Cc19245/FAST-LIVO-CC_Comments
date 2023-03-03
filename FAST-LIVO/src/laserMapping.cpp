@@ -434,7 +434,7 @@ void lasermap_fov_segment()
 
 #endif
 
-//; 通用的LiDAR的回调函数
+//; 通用LiDAR类型的回调函数，比如机械式的LiDAR
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
     mtx_buffer.lock();
@@ -472,6 +472,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     //    ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
     printf("[ INFO ]: get point cloud at time: %.6f.\n", msg->header.stamp.toSec());
     PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+    //; 对收到的原始点云进行一些预处理，得到后面要使用的面点
     p_pre->process(msg, ptr);
     lidar_buffer.push_back(ptr);
     time_buffer.push_back(msg->header.stamp.toSec());
@@ -986,10 +987,9 @@ int main(int argc, char **argv)
     lidar_selector->ncc_thre = ncc_thre;   // 0 ncc 的阈值
     lidar_selector->sparse_map->set_camera2lidar(cameraextrinR, cameraextrinT); // hr: from camera to lidar
     lidar_selector->set_extrinsic(extT, extR);  // hr: TODO:return T from imu to lidar
-    lidar_selector->state = &state;  //; 绑定状态变量
+    lidar_selector->state = &state;  //; 绑定状态变量，这样会在VIO里面直接更改LIO的结果
     lidar_selector->state_propagat = &state_propagat;
     lidar_selector->NUM_MAX_ITERATIONS = NUM_MAX_ITERATIONS; // 4
-    //    lidar_selector->MIN_IMG_COUNT = MIN_IMG_COUNT; // repeat
     lidar_selector->img_point_cov = IMG_POINT_COV; // 100
     lidar_selector->fx = cam_fx;
     lidar_selector->fy = cam_fy;
@@ -1095,6 +1095,7 @@ int main(int argc, char **argv)
                 // TODO: threshold lidar_begin_time
                 continue;
             }
+            //; 如果开启VIO模块，则才往下处理
             if (img_en)
             {
                 euler_cur = RotMtoEuler(state.rot_end);
@@ -1104,7 +1105,7 @@ int main(int argc, char **argv)
                          << state.bias_a.transpose() << " " << state.gravity.transpose() << endl;
 
                 /* visual main */
-                // 传入 世界坐标系点云
+                // 传入: 当前帧的图像 和 上一帧的LiDAR在世界坐标系下的点云
                 lidar_selector->detect(LidarMeasures.measures.back().img, pcl_wait_pub); 
                 // int size = lidar_selector->map_cur_frame_.size();
                 int size_sub = lidar_selector->sub_map_cur_frame_.size();
@@ -1131,8 +1132,10 @@ int main(int argc, char **argv)
                 out_msg.image = img_rgb;
                 img_pub.publish(out_msg.toImageMsg());
 
-                publish_frame_world_rgb(pubLaserCloudFullResRgb, lidar_selector); // 发布带有rgb信息的点云信息
-                publish_visual_world_sub_map(pubSubVisualCloud);                  // 发布sub_map_cur_frame_point
+                // 发布带有rgb信息的点云信息
+                publish_frame_world_rgb(pubLaserCloudFullResRgb, lidar_selector); 
+                // 发布sub_map_cur_frame_point
+                publish_visual_world_sub_map(pubSubVisualCloud);  
 
                 geoQuat = tf::createQuaternionMsgFromRollPitchYaw(euler_cur(0), euler_cur(1), euler_cur(2));
                 publish_odometry(pubOdomAftMapped);

@@ -35,7 +35,7 @@ namespace lidar_selection
         float *patch_cache;
         float *patch_with_border_;
         int width, height, grid_n_width, grid_n_height, length;
-        SubSparseMap *sub_sparse_map;
+        SubSparseMap *sub_sparse_map;  //; 存储当前帧子地图的最终结果，主要就是和当前帧patch匹配的历史帧的patch
         double fx, fy, cx, cy;
         bool ncc_en;
         int debug, patch_size, patch_size_total, patch_size_half;
@@ -46,7 +46,7 @@ namespace lidar_selection
         double img_point_cov, outlier_threshold, ncc_thre;
         size_t n_meas_; //!< Number of measurements
         deque<PointPtr> map_cur_frame_;
-        deque<PointPtr> sub_map_cur_frame_;
+        deque<PointPtr> sub_map_cur_frame_;  //; 用于当前帧图像观测的LiDAR地图点
         double computeH, ekf_time;
         double ave_total = 0.01;
         int frame_cont = 1;
@@ -116,14 +116,14 @@ namespace lidar_selection
         PointCloudXYZI::Ptr Map_points_output;
         PointCloudXYZI::Ptr pg_down;
         pcl::VoxelGrid<PointType> downSizeFilter;
-        unordered_map<VOXEL_KEY, VOXEL_POINTS *> feat_map;
-        unordered_map<VOXEL_KEY, float> sub_feat_map; //timestamp
-        unordered_map<int, Warp *> Warp_map;          // reference frame id, A_cur_ref and search_level
+        unordered_map<VOXEL_KEY, VOXEL_POINTS *> feat_map;  //; 这个feat_map就是整个视觉地图，通过hash_key索引对应的体素
+        unordered_map<VOXEL_KEY, float> sub_feat_map; //; 当前帧图像用到的子地图，每次都会重新构造
+        unordered_map<int, Warp *> Warp_map;  //; 当前帧图像对应的patch的图像id，和这个图像跟当前帧图像之间的affine变换，每次都会重新构造
 
         vector<VOXEL_KEY> occupy_postions;
         set<VOXEL_KEY> sub_postion;
-        vector<PointPtr> voxel_points_;
-        vector<V3D> add_voxel_points_;
+        vector<PointPtr> voxel_points_;   //; 当前帧图像用到的子地图的3D点，每次都会重新构造
+        vector<V3D> add_voxel_points_;  //; 当前帧图像加入的新的地图点，每次都会重新构造
 
         cv::Mat img_cp, img_rgb;
         std::vector<FramePtr> overlap_kfs_;
