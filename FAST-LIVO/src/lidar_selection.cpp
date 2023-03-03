@@ -97,6 +97,7 @@ namespace lidar_selection
         add_voxel_points_.reserve(length);
     }
 
+    //; 像素点对相机系下的点的导数，十四讲P220公式(8.16)
     void LidarSelector::dpi(V3D p, MD(2, 3) & J)
     {
         const double x = p[0];
@@ -659,6 +660,7 @@ namespace lidar_selection
                 // Step 3.4: 利用affien变换，计算ref帧的patch变换到当前帧的图像之后的像素值
                 for (int pyramid_level = 0; pyramid_level <= 0; pyramid_level++) // pyramid_level == 0
                 { 
+                    //! 注意：这里算的是反向的warp，和深度估计里面差不多
                     warpAffine(A_cur_ref_zero, ref_ftr->img, ref_ftr->px, ref_ftr->level, 
                                search_level, pyramid_level, patch_size_half, patch_wrap); // 只对第0层实施仿射变换，可以得到亚像素级别的精度
                 }
@@ -892,17 +894,17 @@ namespace lidar_selection
         float error = 0.0, last_error = total_residual, patch_error = 0.0, last_patch_error = 0.0, propa_error = 0.0;
         // MatrixXd H;
         bool z_init = true;
-        const int H_DIM = total_points * patch_size_total;
+        const int H_DIM = total_points * patch_size_total;  //; 残差的维度，点的总数 * patch大小
 
         // K.resize(H_DIM, H_DIM);
-        z.resize(H_DIM);
+        z.resize(H_DIM);  
         z.setZero();
         // R.resize(H_DIM);
         // R.setZero();
 
         // H.resize(H_DIM, DIM_STATE);
         // H.setZero();
-        H_sub.resize(H_DIM, 6);
+        H_sub.resize(H_DIM, 6);  //; 这里写成H_sub是因为光度残差之和位姿有关，所以6维就够了
         H_sub.setZero();
 
         for (int iteration = 0; iteration < NUM_MAX_ITERATIONS; iteration++)
@@ -925,25 +927,28 @@ namespace lidar_selection
             for (i = 0; i < sub_sparse_map->index.size(); i++)
             {
                 patch_error = 0.0;
+                //; search_level是patch匹配要求的level，而level是当前优化从哪个level开始
                 int search_level = sub_sparse_map->search_levels[i];
                 int pyramid_level = level + search_level;
                 const int scale = (1 << pyramid_level); // 2^pyramid_level
 
-                PointPtr pt = sub_sparse_map->voxel_points[i];
+                PointPtr pt = sub_sparse_map->voxel_points[i];  //; 3D 地图点
 
                 if (pt == nullptr)
                     continue;
 
                 V3D pf = Rcw * pt->pos_ + Pcw; // pt: world frame; pf: camera frame
-                pc = cam->world2cam(pf);
+                pc = cam->world2cam(pf);  //; pc是patch的中心点的像素坐标
                 // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                 {
+                    //; 十四讲 P200, (8.16), du/dq
                     dpi(pf, Jdpi);               // use pf(x,y,z) to return MD(2, 3) Jdpi
+                    //; 十四讲 P200, (8.17), dq/dT
                     p_hat << SKEW_SYM_MATRX(pf); // 0.0, -pf[2], pf[1], pf[2], 0.0, -pf[0], -pf[1], pf[0], 0.0
                 }
                 const float u_ref = pc[0];
                 const float v_ref = pc[1];
-                const int u_ref_i = floorf(pc[0] / scale) * scale;
+                const int u_ref_i = floorf(pc[0] / scale) * scale; 
                 const int v_ref_i = floorf(pc[1] / scale) * scale;
                 const float subpix_u_ref = (u_ref - u_ref_i) / scale;
                 const float subpix_v_ref = (v_ref - v_ref_i) / scale;
@@ -952,16 +957,19 @@ namespace lidar_selection
                 const float w_ref_bl = (1.0 - subpix_u_ref) * subpix_v_ref;
                 const float w_ref_br = subpix_u_ref * subpix_v_ref;
 
-                float *P = sub_sparse_map->patch[i];
-                for (int x = 0; x < patch_size; x++)
+                float *P = sub_sparse_map->patch[i];  //; 取出地图观测的patch
+                //; x是遍历当前patch的纵坐标，y是遍历当前patch的横坐标
+                for (int x = 0; x < patch_size; x++) 
                 {
+                    //; 取当前帧的图像的像素在对应的金字塔层上的像素坐标值
                     uint8_t *img_ptr =
-                        (uint8_t *)img.data + (v_ref_i + x * scale - patch_size_half * scale) * width + u_ref_i -
-                        patch_size_half * scale; // TODO:?
+                        (uint8_t *)img.data + (v_ref_i + x * scale - patch_size_half * scale) * width 
+                        + u_ref_i - patch_size_half * scale; // TODO:?
                     for (int y = 0; y < patch_size; ++y, img_ptr += scale)
                     {
                         // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                         //{
+                        //; 这里就是对图像上的点进行线性插值，然后计算像素梯度
                         float du = 0.5f * ((w_ref_tl * img_ptr[scale] + w_ref_tr * img_ptr[scale * 2] +
                                             w_ref_bl * img_ptr[scale * width + scale] +
                                             w_ref_br * img_ptr[scale * width + scale * 2]) -
@@ -974,18 +982,27 @@ namespace lidar_selection
                                      w_ref_br * img_ptr[width * scale * 2 + scale]) -
                                     (w_ref_tl * img_ptr[-scale * width] + w_ref_tr * img_ptr[-scale * width + scale] +
                                      w_ref_bl * img_ptr[0] + w_ref_br * img_ptr[scale]));
-                        Jimg << du, dv;
-                        Jimg = Jimg * (1.0 / scale);
-                        Jdphi = Jimg * Jdpi * p_hat;
+                        Jimg << du, dv;  //; 像素梯度雅克比
+                        Jimg = Jimg * (1.0 / scale);  //; 这里除以尺度是因为这个像素坐标是金字塔缩小之后的，所以梯度也会缩小
+                        //; 这个是de/dR, 是对旋转的李代数导数
+                        Jdphi = Jimg * Jdpi * p_hat;  //; 十四讲P200，（8.19）
+                        //; 这个是de/dt，是对平移的李代数导数
                         Jdp = -Jimg * Jdpi;
+
+                        //; 上面都是对相机系的位姿的雅克比，这里还要转成对IMU系的位姿的雅克比
+                        //! 疑问：怎么推导的？
                         JdR = Jdphi * Jdphi_dR + Jdp * Jdp_dR;
                         Jdt = Jdp * Jdp_dt;
-                        //}
+
+                        //; 这里就是计算当前帧图像的像素和patch像素之间的残差。注意这里和雅克比的定义恰好差符号，因为后面
+                        //; 正规方程中使用的z就是差符号的，也就是正常是Hx = -b，而作者用的是 Hx = b
                         double res =
-                            w_ref_tl * img_ptr[0] + w_ref_tr * img_ptr[scale] + w_ref_bl * img_ptr[scale * width] +
-                            w_ref_br * img_ptr[scale * width + scale] -
+                            w_ref_tl * img_ptr[0] + w_ref_tr * img_ptr[scale] + 
+                            w_ref_bl * img_ptr[scale * width] + w_ref_br * img_ptr[scale * width + scale] -
                             P[patch_size_total * level + x * patch_size + y]; // TODO:公式推导
-                        z(i * patch_size_total + x * patch_size + y) = res;
+
+                        //; 存储残差
+                        z(i * patch_size_total + x * patch_size + y) = res;  
                         // float weight = 1.0;
                         // if(iteration > 0)
                         //     weight = weight_function_->value(res/weight_scale_);
@@ -994,6 +1011,7 @@ namespace lidar_selection
                         n_meas_++;
                         // H.block<1,6>(i*patch_size_total+x*patch_size+y,0) << JdR*weight, Jdt*weight;
                         // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
+                        //; 存储雅克比
                         H_sub.block<1, 6>(i * patch_size_total + x * patch_size + y, 0) << JdR, Jdt;
                     }
                 }
@@ -1018,15 +1036,17 @@ namespace lidar_selection
                 // G = K*H;
                 // (*state) += (-K*z + vec - G*vec);
 
-                auto &&H_sub_T = H_sub.transpose();
+                auto &&H_sub_T = H_sub.transpose();  //; 6*n
                 H_T_H.block<6, 6>(0, 0) = H_sub_T * H_sub;
                 MD(DIM_STATE, DIM_STATE) &&K_1 = (H_T_H +
                                                   (state->cov / img_point_cov).inverse())
                                                      .inverse(); // TODO：视觉协方差
-                auto &&HTz = H_sub_T * z;
+                auto &&HTz = H_sub_T * z;  //; 6*n x n*1 = 6*1
                 // K = K_1.block<DIM_STATE,6>(0,0) * H_sub_T;
+                //; state_propagat 就是IMU预测的状态，而state是当前状态，所以vec就是状态的误差，这个就是IEKF的公式
                 auto vec = (*state_propagat) - (*state);
                 G.block<DIM_STATE, 6>(0, 0) = K_1.block<DIM_STATE, 6>(0, 0) * H_T_H.block<6, 6>(0, 0);
+                //! 疑问：感觉这里多了一项vec? 应该是没有vec的吧？
                 auto solution = -K_1.block<DIM_STATE, 6>(0, 0) * HTz + vec -
                                 G.block<DIM_STATE, 6>(0, 0) * vec.block<6, 1>(0, 0);
                 (*state) += solution;
@@ -1063,6 +1083,10 @@ namespace lidar_selection
         new_frame_->T_f_w_ = SE3(Rcw, Pcw);
     }
 
+    /**
+     * @brief 优化结束后，添加当前帧对视觉地图点的新的观测
+     * 
+     */
     void LidarSelector::addObservation(cv::Mat img)
     {
         int total_points = sub_sparse_map->index.size();
@@ -1071,10 +1095,10 @@ namespace lidar_selection
 
         for (int i = 0; i < total_points; i++)
         {
-            PointPtr pt = sub_sparse_map->voxel_points[i];
+            PointPtr pt = sub_sparse_map->voxel_points[i];   //; 观测到的地图点
             if (pt == nullptr)
                 continue;
-            V2D pc(new_frame_->w2c(pt->pos_));
+            V2D pc(new_frame_->w2c(pt->pos_));  //; 地图点投影到当前帧
             SE3 pose_cur = new_frame_->T_f_w_;
             bool add_flag = false;
             // if (sub_sparse_map->errors[i]<= 100*patch_size_total && sub_sparse_map->errors[i]>0) //&& align_flag[i]==1)
@@ -1090,6 +1114,7 @@ namespace lidar_selection
                 // if(new_frame_->id_ >= last_feature->id_ + 20) add_flag = true;
 
                 // Step 2: delta_pose
+                //; 计算当前帧和地图点最新观测帧之间的位姿变换，如果超过阈值，则加入当前帧对地图点的观测
                 SE3 pose_ref = last_feature->T_f_w_;
                 SE3 delta_pose = pose_ref * pose_cur.inverse();
                 double delta_p = delta_pose.translation().norm();
@@ -1098,12 +1123,14 @@ namespace lidar_selection
                     add_flag = true;
 
                 // Step 3: pixel distance
+                //; 判断当前帧和地图点最近观测帧之间的像素差，如果超过阈值，则加入当前帧对地图点的观测
                 Vector2d last_px = last_feature->px;
                 double pixel_dist = (pc - last_px).norm();
                 if (pixel_dist > 40)
                     add_flag = true;
 
                 // Maintain the size of 3D Point observation features.
+                //; 如果地图点的观测个数过多，那么删除之前的观测，保留最近比较新的观测
                 if (pt->obs_.size() >= 20)
                 {
                     FeaturePtr ref_ftr;
@@ -1111,6 +1138,7 @@ namespace lidar_selection
                     pt->deleteFeatureRef(ref_ftr);
                     // ROS_WARN("ref_ftr->id_ is %d", ref_ftr->id_);
                 }
+                //; 如果添加新的观测，则new一个Feature，并把它添加到地图点中
                 if (add_flag)
                 {
                     pt->value = vk::shiTomasiScore(img, pc[0], pc[1]);
@@ -1127,6 +1155,7 @@ namespace lidar_selection
         }
     }
 
+
     void LidarSelector::ComputeJ(cv::Mat img)
     {
         int total_points = sub_sparse_map->index.size();  //; 子地图找到的所有的匹配的patch个数
@@ -1141,6 +1170,7 @@ namespace lidar_selection
             now_error = UpdateState(img, error, level);
         }
 
+        //; 如果误差降低，那么才把最终的协方差矩阵进行更新
         if (now_error < error)
         {
             state->cov -= G * state->cov; // 更新协方差
