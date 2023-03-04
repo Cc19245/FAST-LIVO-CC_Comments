@@ -412,7 +412,7 @@ namespace lidar_selection
         // Step 0.1: 把当前帧的子地图中的点全部清空
         reset_grid();
         memset(map_value, 0, sizeof(float) * length); // length = grid_n_width * grid_n_height
-        //    cout << "1111111111111111111111: " << sizeof(float)*length << endl; todo:???768
+        cout << "1111111111111111111111: " << sizeof(float)*length << endl; // todo:???768
 
         // Step 0.2: 清空最终用到的子地图的值，这里面只存储了观测的patch等有用信息，而没有存储中间信息
         sub_sparse_map->reset();
@@ -426,7 +426,9 @@ namespace lidar_selection
         // cv::Mat depth_img = cv::Mat::zeros(height, width, CV_32FC1);
         // float* it = (float*)depth_img.data;
         
-        float it[height * width] = {0.0};   //; 存储的图像中每个点的深度，这是后面对网格中的地图点检查深度连续性使用的
+        std::cout << "h*w = " << height * width << std::endl;
+        // float it[height * width] = {0.0};   //; 存储的图像中每个点的深度，这是后面对网格中的地图点检查深度连续性使用的
+        std::vector<float> it(height*width, 0);
 
         double t_insert, t_depth, t_position;
         t_insert = t_depth = t_position = 0;

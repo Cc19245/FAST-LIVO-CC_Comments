@@ -6,11 +6,13 @@ FAST-LIVO_CC_Comments
 
 ## Done
 
-None.
+- 整体流程看完.
+- LiDAR和Image数据时间戳同步看完，并发现一些问题
+- VIO系统看完，包括视觉子地图的选择，当前帧patch和地图点patch的关联，直接光度对齐的IEKF优化
 
 ## TODO
 
-- [ ] 从头看一遍代码
+- [ ] 点云去畸变部分写的很乱，而且发现一些去畸变的时候对时间的处理问题，待查
 
 ## Acknowledgements
 
