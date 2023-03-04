@@ -1,0 +1,48 @@
+feature_extract_enable : 0
+point_filter_num : 4
+max_iteration : 10
+dense_map_enable : 1
+filter_size_surf : 0.5 # 0.3
+filter_size_map : 0.5 # 0.4
+cube_side_length : 20 
+debug : 0
+grid_size : 40
+patch_size : 8
+img_enable : 1
+lidar_enable : 1
+outlier_threshold : 50
+ncc_en: true
+ncc_thre: 0.5
+img_point_cov : 1000
+laser_point_cov : 0.001
+cam_fx: 1067.79825252945
+cam_fy: 1067.37723986085
+cam_cx: 957.149889941676
+cam_cy: 610.343040724646
+
+common:
+    lid_topic:  "/velodyne_points_recovery"
+    imu_topic:  "/imu1/data"
+
+preprocess:
+    lidar_type: 2  # Velodyne
+    scan_line: 16
+    blind: 4 # blind x m disable
+
+mapping:
+    acc_cov_scale: 100 #10
+    gyr_cov_scale: 10000 #10
+    fov_degree:    180
+    # T_lidar_imu
+    extrinsic_T: [-0.0148149, -0.108094, -0.124959]
+    extrinsic_R: [-0.0132882,  0.999893,  -0.006196,
+                  -0.999883,  -0.0133347, -0.00753585,
+                  -0.00761767, 0.00609514, 0.999952]
+
+camera:
+    img_topic: /camera/image_raw 
+    # T_cam_lidar
+    Rcl: [0.0339634, -0.999422,   0.00126855,
+         -0.109503, -0.00498287, -0.993974,
+          0.993406,  0.0336198,  -0.109609]
+    Pcl: [0.0689083, -0.126005, -0.175209]

@@ -449,7 +449,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
     p_pre->process(msg, ptr);
     // ROS_INFO("get point cloud at time: %.6f and size: %d", msg->header.stamp.toSec() - 0.1, ptr->points.size());
     //    ROS_INFO("get point cloud at time: %.6f and size: %d", msg->header.stamp.toSec(), ptr->points.size());
-    printf("[ INFO ]: get point cloud at time: %.6f and size: %d.\n", msg->header.stamp.toSec(),
+    printf("[ INFO ]: get standard point cloud at time: %.6f and size: %d.\n", msg->header.stamp.toSec(),
            int(ptr->points.size()));
     lidar_buffer.push_back(ptr);
     // time_buffer.push_back(msg->header.stamp.toSec() - 0.1);
@@ -470,7 +470,7 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
         lidar_buffer.clear();
     }
     //    ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
-    printf("[ INFO ]: get point cloud at time: %.6f.\n", msg->header.stamp.toSec());
+    // printf("[ INFO ]: get livox point cloud at time: %.6f.\n", msg->header.stamp.toSec());
     PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
     //; 对收到的原始点云进行一些预处理，得到后面要使用的面点
     p_pre->process(msg, ptr);
@@ -511,6 +511,8 @@ cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 {
     cv::Mat img;
     img = cv_bridge::toCvShare(img_msg, "bgr8")->image;
+    // img = cv_bridge::toCvCopy(img_msg, "bgr8")->image;
+
     return img;
 }
 
@@ -522,7 +524,7 @@ void img_cbk(const sensor_msgs::ImageConstPtr &msg)
         return;
     }
     //    ROS_INFO("get img at time: %.6f", msg->header.stamp.toSec());
-    printf("[ INFO ]: get img at time: %.6f.\n", msg->header.stamp.toSec());
+    // printf("[ INFO ]: get img at time: %.6f.\n", msg->header.stamp.toSec());
     if (msg->header.stamp.toSec() < last_timestamp_img)
     {
         ROS_ERROR("img loop back, clear buffer");
@@ -576,17 +578,19 @@ bool sync_packages(LidarMeasureGroup &meas)
 
     if (!lidar_pushed)  // If not in lidar scan, need to generate new meas
     {  
-        //! 疑问：这里这种时间戳对齐感觉是有很大的问题的，也就是它要求当前对齐一帧图像或者LiDAR数据的时候，
-        //!      必须有LiDAR数据存在。
+        //! 疑问：这里这种时间戳对齐要求当前对齐一帧图像或者LiDAR数据的时候，必须有LiDAR数据存在。
         // 也就是视觉的数据会被延迟最大0.1s处理。比如图像是30hz, LiDAR是10hz，他们都经过硬件时间同步，
         // 也就是时间戳是完全准确的，没有任何时间偏移。如下图所示：
+        //                   1           2           3
         //    LiDAR时间戳：   |           |           | 
         //    相机时间戳：       |   |   |   |   |   |   |
-        // 假设LiDAR先来，那么后面会先把第一帧LiDAR处理掉。然后第二次同步的时候进入当前if分支，发现LiDAR
-        // 是空的，那么直接返回。但是此时显然前面是有几帧相机数据的，但是由于没有第二帧的LiDAR数据，所以这里
-        // 仍然不会处理相机数据，而是要等到第二帧LiDAR数据来了之后才会往下进行。往下进行发现有一些比第二帧
-        // LiDAR数据更老的图像数据，也就是相机的前三帧都没有被处理，所以此时才会处理这三帧图像数据。处理完
-        // 这三帧图像数据之后，才会继续处理第二帧的LiDAR数据。
+        //                     1   2   3   4   5   6   7
+        // (1)假设LiDAR先来，那么后面会先把第1帧LiDAR处理掉。
+        // (2)第二次同步的时候进入当前if分支，发现LiDAR是空的，那么直接返回。此时即使有几帧相机数据，
+        //    但是由于没有第2帧的LiDAR数据，所以这里仍然不会处理相机数据，而是要等到第2帧LiDAR数据
+        //    来了之后才会往下进行。往下进行发现有一些比第2帧LiDAR数据更老的图像数据，也就是相机的
+        //    前3帧都没有被处理，所以此时才会处理这3帧图像数据。处理完这3帧图像数据之后，然后继续
+        //    处理第2帧的LiDAR数据。
         //; 另外注意：这里的lidar时间戳是以一帧的结束为标准的，因为后面去畸变是把一帧点云对齐到结尾
         if (lidar_buffer.empty())
         {
@@ -785,7 +789,7 @@ void publish_frame_world_rgb(const ros::Publisher &pubLaserCloudFullRes, lidar_s
         sensor_msgs::PointCloud2 laserCloudmsg;
         if (img_en)
         {
-            cout << "RGB pointcloud size: " << laserCloudWorldRGB->size() << endl;
+            // cout << "RGB pointcloud size: " << laserCloudWorldRGB->size() << endl;
             pcl::toROSMsg(*laserCloudWorldRGB, laserCloudmsg);
         }
         else
@@ -1125,7 +1129,7 @@ int main(int argc, char **argv)
         {
             //            cout << "[ VIO ]: Raw feature num: " << feats_undistort->points.size() << endl;
             //; 打印本次VIO之前，上一次LIO的LiDAR点云(转到world系下)
-            cout << "[ VIO ]: Raw feature num: " << pcl_wait_pub->points.size() << "." << endl;
+            // cout << "[ VIO ]: Raw feature num: " << pcl_wait_pub->points.size() << "." << endl;
             if (first_lidar_time < 10)
             { 
                 // TODO: threshold lidar_begin_time
@@ -1208,8 +1212,8 @@ int main(int argc, char **argv)
         int featsFromMapNum = ikdtree.size();
 
         feats_down_size = feats_down_body->points.size();
-        cout << "[ LIO ]: Raw feature num: " << feats_undistort->points.size() << " downsamp num " << feats_down_size
-             << " Map num: " << featsFromMapNum << "." << endl;
+        // cout << "[ LIO ]: Raw feature num: " << feats_undistort->points.size() << " downsamp num " << feats_down_size
+        //      << " Map num: " << featsFromMapNum << "." << endl;
 
         /*** ICP and iterated Kalman filter update ***/
         normvec->resize(feats_down_size);
@@ -1329,11 +1333,11 @@ int main(int argc, char **argv)
 
                 res_mean_last = total_residual / effct_feat_num;
                 // debug:
-                cout << "[ mapping ]: Effective feature num: " << effct_feat_num << " res_mean_last " << res_mean_last
-                     << endl;
-                printf("[ LIO ]: time: fov_check: %0.6f fov_check and readd: %0.6f match: %0.6f solve: %0.6f  ICP: %0.6f  map incre: %0.6f total: %0.6f icp: %0.6f construct H: %0.6f.\n",
-                       fov_check_time, t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu,
-                       aver_time_icp, aver_time_const_H_time);
+                // cout << "[ mapping ]: Effective feature num: " << effct_feat_num << " res_mean_last " << res_mean_last
+                //      << endl;
+                // printf("[ LIO ]: time: fov_check: %0.6f fov_check and readd: %0.6f match: %0.6f solve: %0.6f  ICP: %0.6f  map incre: %0.6f total: %0.6f icp: %0.6f construct H: %0.6f.\n",
+                //        fov_check_time, t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu,
+                //        aver_time_icp, aver_time_const_H_time);
                 match_time += omp_get_wtime() - match_start; // 匹配结束
                 solve_start = omp_get_wtime();               // 迭代求解开始
 
@@ -1461,7 +1465,7 @@ int main(int argc, char **argv)
         }
 
         // debug
-        cout << "[ mapping ]: iteration count: " << iterCount + 1 << endl;
+        // cout << "[ mapping ]: iteration count: " << iterCount + 1 << endl;
 
         // SaveTrajTUM(LidarMeasures.lidar_beg_time, state.rot_end, state.pos_end);
         double t_update_end = omp_get_wtime();
@@ -1511,9 +1515,9 @@ int main(int argc, char **argv)
         s_plot5[time_log_counter] = t5 - t0;
         time_log_counter++;
         // cout<<"[ mapping ]: time: fov_check "<< fov_check_time <<" fov_check and readd: "<<t1-t0<<" match "<<aver_time_match<<" solve "<<aver_time_solve<<" ICP "<<t3-t1<<" map incre "<<t5-t3<<" total "<<aver_time_consu << "icp:" << aver_time_icp << "construct H:" << aver_time_const_H_time <<endl;
-        printf("[ mapping ]: time: fov_check %0.6f fov_check and readd: %0.6f match: %0.6f solve: %0.6f  ICP: %0.6f  map incre: %0.6f total: %0.6f icp: %0.6f construct H: %0.6f \n",
-               fov_check_time, t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu,
-               aver_time_icp, aver_time_const_H_time);
+        // printf("[ mapping ]: time: fov_check %0.6f fov_check and readd: %0.6f match: %0.6f solve: %0.6f  ICP: %0.6f  map incre: %0.6f total: %0.6f icp: %0.6f construct H: %0.6f \n",
+        //        fov_check_time, t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu,
+        //        aver_time_icp, aver_time_const_H_time);
         if (lidar_en)
         {
             euler_cur = RotMtoEuler(state.rot_end);

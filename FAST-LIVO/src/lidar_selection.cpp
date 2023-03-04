@@ -226,11 +226,11 @@ namespace lidar_selection
         double t_b3 = omp_get_wtime() - t0;
 
         //        printf("[ Add ] : %d 3D points \n", add);
-        printf("pg.size: %d \n", pg->size());  //; 这一帧点云总数
+        // printf("pg.size: %d \n", pg->size());  //; 这一帧点云总数
         //        printf("B1. : %.6lf \n", t_b1);
         //        printf("B2. : %.6lf \n", t_b2);
         //        printf("B3. : %.6lf \n", t_b3);
-        printf("[ VIO ]: Add %d 3D points.\n", add);  //; 这一帧新加入的3D点
+        // printf("[ VIO ]: Add %d 3D points.\n", add);  //; 这一帧新加入的3D点
     }
 
     void LidarSelector::AddPoint(PointPtr pt_new)
@@ -433,7 +433,7 @@ namespace lidar_selection
 
         int loc_xyz[3];
 
-        printf("A0. initial depthmap: %.6lf \n", omp_get_wtime() - ts0);
+        // printf("A0. initial depthmap: %.6lf \n", omp_get_wtime() - ts0);
 
         /*  */
         double ts1 = omp_get_wtime();
@@ -483,13 +483,13 @@ namespace lidar_selection
         //    printf("A12. sub_postion.insert(position): %.6lf \n", t_insert);
         //    printf("A13. generate depth map: %.6lf \n", t_depth);
         // 投影
-        printf("A. projection: %.6lf \n", omp_get_wtime() - ts0);
+        // printf("A. projection: %.6lf \n", omp_get_wtime() - ts0);
 
         /* B. feat_map.find */
         double t1 = omp_get_wtime();
         
         // Step 2: 遍历上面找到的所有体素，把体素中的所有地图点都拿出来投影到图像上；然后划分网格，保留网格中深度最近的那个点
-        for (auto &iter :  )
+        for (auto &iter : sub_feat_map)
         {
             VOXEL_KEY position = iter.first;
             double t4 = omp_get_wtime();
@@ -707,7 +707,7 @@ namespace lidar_selection
         //        cout << "C. addSubSparseMap: " << t3 - t2 << endl;
         //        cout << "depthcontinuous: C1 " << t_2 << " C2 " << t_3 << " C3 " << t_4 << " C4 " << t_5 << endl;
         //        cout << "[ addFromSparseMap ] " << sub_sparse_map->index.size() << endl;
-        printf("[ VIO ]: choose %d points from sub_sparse_map.\n", int(sub_sparse_map->index.size()));
+        // printf("[ VIO ]: choose %d points from sub_sparse_map.\n", int(sub_sparse_map->index.size()));
     }
 
     bool LidarSelector::align2D(
@@ -1236,7 +1236,7 @@ namespace lidar_selection
     {
         if (width != img.cols || height != img.rows)
         {
-            std::cout << "Resize the img scale !!!" << std::endl;
+            // std::cout << "Resize the img scale !!!" << std::endl;
             double scale = 0.5;
             cv::resize(img, img, cv::Size(img.cols * scale, img.rows * scale), 0, 0, CV_INTER_LINEAR);
         }
@@ -1294,8 +1294,8 @@ namespace lidar_selection
         ave_total = ave_total * (frame_cont - 1) / frame_cont + (t2 - t1) / frame_cont;
 
         //        cout << "total time: " << t2 - t1 << " ave: " << ave_total << endl;
-        printf("[ VIO ]: time: addFromSparseMap: %0.6f addSparseMap: %0.6f ComputeJ: %0.6f addObservation: %0.6f total time: %0.6f ave_total: %0.6f.\n",
-               t3 - t1, t4 - t3, t5 - t4, t2 - t5, t2 - t1);
+        // printf("[ VIO ]: time: addFromSparseMap: %0.6f addSparseMap: %0.6f ComputeJ: %0.6f addObservation: %0.6f total time: %0.6f ave_total: %0.6f.\n",
+        //        t3 - t1, t4 - t3, t5 - t4, t2 - t5, t2 - t1);
 
         display_keypatch(t2 - t1); // 绘制关键patch
     }
