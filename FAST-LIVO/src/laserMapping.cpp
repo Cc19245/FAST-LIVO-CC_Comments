@@ -163,7 +163,7 @@ bool flg_EKF_inited, flg_EKF_converged, EKF_stop_flg = 0;
 PointCloudXYZI::Ptr featsFromMap(new PointCloudXYZI());
 PointCloudXYZI::Ptr cube_points_add(new PointCloudXYZI());
 PointCloudXYZI::Ptr map_cur_frame_point(new PointCloudXYZI());
-PointCloudXYZI::Ptr sub_map_cur_frame_point(new PointCloudXYZI());
+PointCloudXYZI::Ptr sub_map_cur_frame_point(new PointCloudXYZI());  //; 当前图像用的视觉地图点，很稀疏的点云
 
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_body(new PointCloudXYZI());
@@ -542,6 +542,22 @@ void img_cbk(const sensor_msgs::ImageConstPtr &msg)
     sig_buffer.notify_all();
 }
 
+
+/**
+ * @brief 以LiDAR时间戳为一次处理前提的数据包对齐。
+ *          LiDAR时间戳：   |            |           |   （注意以一帧点云结尾时间戳为准）
+ *                         1            2           3
+ *           相机时间戳 ：      |   |   |   |   |   |   |
+ *                            1   2   3   4   5   6   7
+ * 两种情况：1. 当前最新帧就是LiDAR，没有更老的图像，比如上面第1帧lidar，那么同步的方法和LIO一样，非常简单
+ *         2. 当前必须有一个LIDAR，比如上面第2帧lidar。但是LiDAR前面有一些更老的图像没有处理，比如
+ *            第1、2、3帧图像，那么此时就要先同步这三帧图像。但是显然这种方法对图像的处理是有一些滞后的， 
+ *            因为它要求必须有了一帧LiDAR才能对 比这帧LiDAR更老的图像进行处理。不过lidar是10hz，也不会
+ *            滞后太多，因此问题也不大。
+ * @param[in] meas 
+ * @return true 
+ * @return false 
+ */
 bool sync_packages(LidarMeasureGroup &meas)
 {
     if ((lidar_buffer.empty() && img_buffer.empty()))
@@ -550,20 +566,34 @@ bool sync_packages(LidarMeasureGroup &meas)
     }
     // ROS_ERROR("In sync");
     // If meas.is_lidar_end==true, means it just after scan end, clear all buffer in meas. 一次扫描结束
-    //; 一帧lidar刚扫描结束，那么清空要同步的IMU和相机数据，准备存储和这帧LIDAR对应的数据
+    //; 如果上次同步的消息是以lidar为结尾的，说明上次处理了一帧以lidar为结尾的数据，那么这次统计
+    //; 图像数据的时候就要先清空了，因为measures里面存储的是以上一帧LiDAR为结尾的多帧的图像数据和IMU数据
     if (meas.is_lidar_end) 
     {
         meas.measures.clear();
         meas.is_lidar_end = false;
     }
 
-    if (!lidar_pushed)
-    { // If not in lidar scan, need to generate new meas
+    if (!lidar_pushed)  // If not in lidar scan, need to generate new meas
+    {  
+        //! 疑问：这里这种时间戳对齐感觉是有很大的问题的，也就是它要求当前对齐一帧图像或者LiDAR数据的时候，
+        //!      必须有LiDAR数据存在。
+        // 也就是视觉的数据会被延迟最大0.1s处理。比如图像是30hz, LiDAR是10hz，他们都经过硬件时间同步，
+        // 也就是时间戳是完全准确的，没有任何时间偏移。如下图所示：
+        //    LiDAR时间戳：   |           |           | 
+        //    相机时间戳：       |   |   |   |   |   |   |
+        // 假设LiDAR先来，那么后面会先把第一帧LiDAR处理掉。然后第二次同步的时候进入当前if分支，发现LiDAR
+        // 是空的，那么直接返回。但是此时显然前面是有几帧相机数据的，但是由于没有第二帧的LiDAR数据，所以这里
+        // 仍然不会处理相机数据，而是要等到第二帧LiDAR数据来了之后才会往下进行。往下进行发现有一些比第二帧
+        // LiDAR数据更老的图像数据，也就是相机的前三帧都没有被处理，所以此时才会处理这三帧图像数据。处理完
+        // 这三帧图像数据之后，才会继续处理第二帧的LiDAR数据。
+        //; 另外注意：这里的lidar时间戳是以一帧的结束为标准的，因为后面去畸变是把一帧点云对齐到结尾
         if (lidar_buffer.empty())
         {
             // ROS_ERROR("out sync");
             return false;
         }
+        //; 这里的LiDAR是单独存成了PCL点云格式，所以后面用一个单独的time_buffer来存储它的时间戳了
         meas.lidar = lidar_buffer.front(); // push the first lidar topic
         //; 如果这帧lidar点云无效，则要弹出图像数据。但是这个地方正常来说应该不会发生？
         if (meas.lidar->points.size() <= 1)
@@ -581,15 +611,16 @@ bool sync_packages(LidarMeasureGroup &meas)
             return false;
         }
         // sort by sample timestamp; small to big
-        //; 对lidar中的点云根据时间戳进行排除
+        //; 对lidar中的点云根据时间戳进行排序
         sort(meas.lidar->points.begin(), meas.lidar->points.end(), time_list); 
         // generate lidar_beg_time // 雷达开始时间
-        //! 疑问：这个地方感觉和前面 lidar_buffer.pop_front(); 不同步？
+        //! 疑问：这个地方感觉和前面 lidar_buffer.pop_front(); 不同步？但是正常来说前面的问题应该不会发生
         meas.lidar_beg_time = time_buffer.front();   
         //; 一帧lidar结束的绝对时间戳                          
         lidar_end_time =
             meas.lidar_beg_time +
             meas.lidar->points.back().curvature / double(1000); // calc lidar scan end time 雷达扫描结束时间
+        //; lidar_pushed 表示meas中的lidar点云插入了，但是还没有从buf中弹出
         lidar_pushed = true;                                    // flag
     }
 
@@ -616,13 +647,16 @@ bool sync_packages(LidarMeasureGroup &meas)
             m.imu.push_back(imu_buffer.front());
             imu_buffer.pop_front();
         }
+        //; 现在真正统计完一次以LiDAR为结尾的数据了，所以要把LiDAR消息和对应的时间戳弹出
         lidar_buffer.pop_front();
         time_buffer.pop_front();
         mtx_buffer.unlock();
         sig_buffer.notify_all();
+        //; lidar_pushed=true，说明 meas 插入了LiDAR消息，但是还没有同步完成，也就是在buffer中还有这个lidar消息
+        //; 而如果=fasle，说明 meas 插入了LIDAR消息并且同步完成了，也就是buffer中已经弹出这个消息了
         lidar_pushed = false;     // sync one whole lidar scan.
         // process lidar topic, so timestamp should be lidar scan end.
-        meas.is_lidar_end = true; 
+        meas.is_lidar_end = true;  //; 这个表示当前对齐的一帧消息是否是以LiDAR的时间戳为结尾的
         meas.measures.push_back(m);
         // ROS_ERROR("out sync");
         return true;
@@ -633,7 +667,7 @@ bool sync_packages(LidarMeasureGroup &meas)
     // cout<<"lidar_buffer.size(): "<<lidar_buffer.size()<<" img_buffer.size(): "<<img_buffer.size()<<endl;
     // cout<<"time_buffer.size(): "<<time_buffer.size()<<" img_time_buffer.size(): "<<img_time_buffer.size()<<endl;
     // cout<<"img_time_buffer.front(): "<<img_time_buffer.front()<<"lidar_end_time: "<<lidar_end_time<<"last_timestamp_imu: "<<last_timestamp_imu<<endl;
-    //; 如果图像时间更晚，则当前仍然要处理lidar的帧
+    //; 如果图像时间更晚，则当前仍然要处理lidar的帧，然后这里的操作就和前面图像时间戳为空的操作是一样的
     if ((img_time_buffer.front() > lidar_end_time))
     { // has img topic, but img topic timestamp larger than lidar end time, process lidar topic.
         if (last_timestamp_imu < lidar_end_time + 0.02)
@@ -660,7 +694,7 @@ bool sync_packages(LidarMeasureGroup &meas)
         meas.is_lidar_end = true;
         meas.measures.push_back(m);
     }
-    //; 否则图像时间更早，则要以图像的时间为准
+    //; 否则图像时间更早，那么就要以图像的时间戳为结尾，统计IMU数据
     else
     {  
         // img topic timestamp smaller than lidar end time <=
@@ -690,6 +724,8 @@ bool sync_packages(LidarMeasureGroup &meas)
         sig_buffer.notify_all();
         // has img topic in lidar scan, so flag "is_lidar_end=false"
         meas.is_lidar_end = false; 
+        //; 这里可以发现没有对measures之前的图像数据清空，也就是当前帧LiDAR之前的多帧图像每次同步
+        //; 都会被放到measures里面。后面看一下处理的时候怎么做的，肯定不会重复处理
         meas.measures.push_back(m);
     }
     // ROS_ERROR("out sync");
@@ -731,6 +767,7 @@ void publish_frame_world_rgb(const ros::Publisher &pubLaserCloudFullRes, lidar_s
             pointRGB.z = pcl_wait_pub->points[i].z;
             V3D p_w(pcl_wait_pub->points[i].x, pcl_wait_pub->points[i].y, pcl_wait_pub->points[i].z);
             V2D pc(lidar_selector->new_frame_->w2c(p_w));
+            //; 把上一帧的LIDAR点云投影到当前帧的相机坐标系下，找对应的颜色给点云赋值
             if (lidar_selector->new_frame_->cam_->isInFrame(pc.cast<int>(), 0))
             {
                 // cv::Mat img_cur = lidar_selector->new_frame_->img();
@@ -799,6 +836,7 @@ void publish_visual_world_map(const ros::Publisher &pubVisualCloud)
 
 void publish_visual_world_sub_map(const ros::Publisher &pubSubVisualCloud)
 {
+    //; 当前帧图像用的很稀疏的视觉地图点云
     PointCloudXYZI::Ptr laserCloudFullRes(sub_map_cur_frame_point);
     int size = laserCloudFullRes->points.size();
     if (size == 0)
@@ -948,11 +986,8 @@ int main(int argc, char **argv)
     path.header.frame_id = "camera_init";
 
     /*** variables definition ***/
-    //! 疑问：下面这几个连变量类型都没有，什么意思？
-    VD(DIM_STATE)
-    solution; // 18*1
-    MD(DIM_STATE, DIM_STATE)
-    G, H_T_H, I_STATE; // 18*18
+    VD(DIM_STATE) solution; // 18*1
+    MD(DIM_STATE, DIM_STATE) G, H_T_H, I_STATE; // 18*18
     V3D rot_add, t_add;
     StatesGroup state_propagat;
     PointType pointOri, pointSel, coeff;
@@ -988,7 +1023,7 @@ int main(int argc, char **argv)
     lidar_selector->sparse_map->set_camera2lidar(cameraextrinR, cameraextrinT); // hr: from camera to lidar
     lidar_selector->set_extrinsic(extT, extR);  // hr: TODO:return T from imu to lidar
     lidar_selector->state = &state;  //; 绑定状态变量，这样会在VIO里面直接更改LIO的结果
-    lidar_selector->state_propagat = &state_propagat;
+    lidar_selector->state_propagat = &state_propagat;  //; IMU预测的状态，这和IEKF有关，因为IEKF会一直计算当前状态和预测状态之间的差值
     lidar_selector->NUM_MAX_ITERATIONS = NUM_MAX_ITERATIONS; // 4
     lidar_selector->img_point_cov = IMG_POINT_COV; // 100
     lidar_selector->fx = cam_fx;
@@ -1056,6 +1091,7 @@ int main(int argc, char **argv)
 
         // Step 2: 利用IMU数据对状态变量进行积分递推，同时得到去畸变之后的LIDAR点云
         //! 疑问：里面的代码太乱，没有看懂如果当前帧是图像，到底有没有对点云进行去畸变
+        //! 暂时解答：感觉应该是没有去畸变处理的，以为里面的操作如果是图像则点的时间都不满足要求，都不会去畸变
         p_imu->Process2(LidarMeasures, state, feats_undistort);
         state_propagat = state;
 
@@ -1105,6 +1141,7 @@ int main(int argc, char **argv)
                          << state.bias_a.transpose() << " " << state.gravity.transpose() << endl;
 
                 /* visual main */
+                //! 重要：视觉VIO的主函数！
                 // 传入: 当前帧的图像 和 上一帧的LiDAR在世界坐标系下的点云
                 lidar_selector->detect(LidarMeasures.measures.back().img, pcl_wait_pub); 
                 // int size = lidar_selector->map_cur_frame_.size();

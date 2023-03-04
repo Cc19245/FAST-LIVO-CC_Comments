@@ -1274,12 +1274,12 @@ namespace lidar_selection
 
         computeH = ekf_time = 0.0;
 
-        // Step 4: 使用视觉直接对齐，对状态进行优化
+        // Step 4: 使用视觉直接对齐，对状态进行优化，内容并不难，可以参照十四讲直接法的章节
         ComputeJ(img); // EKF迭代误差更新状态
 
         double t5 = omp_get_wtime();
         
-        // Step 5: 优化之后，对视觉地图点添加当前帧图像的新的观测
+        // Step 5: 优化之后，对视觉地图点添加当前帧图像的新的patch观测
         // 根据distance and view_angle,添加新特征
         addObservation(img);
 
