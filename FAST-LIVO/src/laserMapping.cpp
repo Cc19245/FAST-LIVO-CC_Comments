@@ -507,10 +507,19 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
     sig_buffer.notify_all();
 }
 
+/**
+ * @brief 从ros消息中把图像数据转成cv::Mat类型
+ *  参考博客：https://blog.csdn.net/bigdog_1027/article/details/79090571
+ *  https://zhuanlan.zhihu.com/p/392285419
+ */
 cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 {
     cv::Mat img;
+    //; cv_bridge::toCvShare(img_msg, "bgr8") 是一个cv_bridge::CvImagePtr类型的指针，
+    //; 这里用的是匿名对象的写法，然后直接调用这个指针的成员变量 image，就得到了对应的cv::Mat类型的数据
     img = cv_bridge::toCvShare(img_msg, "bgr8")->image;
+    //; 下面这个修改是github上一个人提的issue说的，说图片比较大的时候使用toCvShare容易出问题，
+    //; 但是作者说测试过最大500w像素的图片没有出问题，因此没有采纳这个issue的建议
     // img = cv_bridge::toCvCopy(img_msg, "bgr8")->image;
 
     return img;
@@ -1546,7 +1555,6 @@ int main(int argc, char **argv)
     // pcd_writer.writeBinary(surf_filename, surf_points);
     // pcd_writer.writeBinary(corner_filename, corner_points);
     // }
-
     vector<double> t, s_vec, s_vec2, s_vec3, s_vec4, s_vec5, s_vec6, s_vec7;
     FILE *fp2;
     string log_dir = root_dir + "/Log/fast_livo_time_log.csv";

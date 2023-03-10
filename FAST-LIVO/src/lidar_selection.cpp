@@ -88,9 +88,11 @@ namespace lidar_selection
     void LidarSelector::reset_grid()
     {
         memset(grid_num, TYPE_UNKNOWN, sizeof(int) * length); // length = grid_n_width * grid_n_height = 768
-                                                              //    cout << "111111111111111111: " << sizeof(int)*length << endl;
+        //    cout << "111111111111111111: " << sizeof(int)*length << endl;
         memset(map_index, 0, sizeof(int) * length);
         fill_n(map_dist, length, 10000);
+        //; 这里还是用swap函数，这样相当于对vector里面的内容进行清空，但是vector占用的
+        //; 仍然是原来的内存，并不需要重新分配内存
         std::vector<PointPtr>(length).swap(voxel_points_); // 此时voxel_points_和add_voxel_points是全新的，没有存任何数据
         std::vector<V3D>(length).swap(add_voxel_points_);
         voxel_points_.reserve(length);     //; 网格中存储的3D点，注意只有一个，就是深度最近的那个点
@@ -390,10 +392,10 @@ namespace lidar_selection
     }
 
     /**
-     * @brief 传入当前帧图像和上一帧的LIDAR点云，计算这些点云中选择为当前帧图像的某个网格中的点，并计算这个点附着的和当前帧
-     *   观测角度最相近的patch，然后计算这个patch所在帧和当前帧之间的affine变换，然后计算patch所在帧在当前帧的图像下对应
-     *   patch位置的像素值，最后计算patch和当前帧观测到的patch之间的像素误差
-     * 
+     * @brief 传入当前帧图像和上一帧的LIDAR点云，计算这些点云中选择为当前帧图像的某个网格中的点，并计算
+     *   这个点附着的和当前帧观测角度最相近的patch，然后计算这个patch所在帧和当前帧之间的affine变换，
+     *   然后计算patch所在帧在当前帧的图像下对应patch位置的像素值，最后计算patch和当前帧观测到的patch
+     *   之间的像素误差
      * @param[in] img 
      * @param[in] pg 
      */
@@ -426,7 +428,7 @@ namespace lidar_selection
         // cv::Mat depth_img = cv::Mat::zeros(height, width, CV_32FC1);
         // float* it = (float*)depth_img.data;
         
-        std::cout << "h*w = " << height * width << std::endl;
+        // std::cout << "h*w = " << height * width << std::endl;
         // float it[height * width] = {0.0};   //; 存储的图像中每个点的深度，这是后面对网格中的地图点检查深度连续性使用的
         std::vector<float> it(height*width, 0);
 
@@ -1190,12 +1192,14 @@ namespace lidar_selection
             PointPtr pt = sub_sparse_map->voxel_points[i];
             V2D pc(new_frame_->w2c(pt->pos_));
             cv::Point2f pf;
-            pf = cv::Point2f(pc[0], pc[1]);
-            if (sub_sparse_map->errors[i] < 8000)                        // 5.5
+            pf = cv::Point2f(pc[0], pc[1]);   //; 把选择的3D地图点投影到当前帧的图像上
+            //! 疑问：这个8000的值是怎么计算的呢？
+            if (sub_sparse_map->errors[i] < 8000)   // 5.5
                 cv::circle(img_cp, pf, 4, cv::Scalar(0, 255, 0), -1, 8); // Green Sparse Align tracked
             else
                 cv::circle(img_cp, pf, 4, cv::Scalar(255, 0, 0), -1, 8); // Blue Sparse Align tracked
         }
+        //; 这个hz其实就反映了VIO这个部分能够处理的最高频率，因为这个频率是纯算VIO的时间得到的频率
         std::string text = std::to_string(int(1 / time)) + " HZ";
         cv::Point2f origin;
         origin.x = 20;
@@ -1245,16 +1249,18 @@ namespace lidar_selection
         img_rgb = img.clone(); // 完全拷贝
         img_cp = img.clone();
         //! 疑问：为什么要进行颜色空间的转换？
+        //; 解答：应该是以为要使用光度误差，所以要从彩色图转成灰度图，所以这里色彩空间是BGR2GRAY
         cv::cvtColor(img, img, CV_BGR2GRAY); // 图像从一个颜色空间转换到另一个颜色空间的转换 opencv default:BGR
 
-        // Step 1: 使用相机模型和当前帧图像，构造一个图像帧
+        // Step 1: 使用相机模型和当前帧图像，构造一个图像帧，这个是在地图中维护的数据结构
         new_frame_.reset(new Frame(cam, img.clone()));
         
         //; 利用IMU积分预测得到的当前IMU在world系下的位姿，然后得到当前时刻下 world系 在 相机系 下的位姿
         updateFrameState(*state); // get transformation of world to camera ：T_f_w
 
         //; 如果当前帧是第一帧，并且点云足够，则设置当前帧为关键帧: 关键帧会寻找特征点
-        //! 疑问：目前来看，只有第一帧图像会提取特征点？
+        //! 疑问：目前来看，只有第一帧图像会提取特征点？为什么要这样呢？按理来说第一帧不提特征点，
+        //; 然后优化之后自然也会把第一帧对地图点的观测patch加到地图里啊？
         if (stage_ == STAGE_FIRST_FRAME && pg->size() > 10)
         {
             new_frame_->setKeyframe(); // hr: find feature points(5 points method)
@@ -1263,13 +1269,15 @@ namespace lidar_selection
 
         double t1 = omp_get_wtime();
 
-        // Step 2: 计算这个图像帧观测到的地图点的patch，这里面就计算了地图点的patch和当前帧的patch之间的光度误差了
+        // Step 2: 计算这个图像帧观测到的地图点的patch，这里面就计算了地图点的patch和当前帧的patch
+        // Step    之间的光度误差了
         addFromSparseMap(img, pg);
 
         double t3 = omp_get_wtime();
 
         // ADD required 3D points
-        // Step 3: 这里属于论文最后一步，也就是优化之后添加新的地图点到视觉地图中。但是由于新的地图点和优化无关，所以这里提前添加也可以
+        // Step 3: 这里属于论文最后一步，也就是优化之后添加新的地图点到视觉地图中。但是由于新的地图点
+        // Step    和优化无关，所以这里提前添加也可以
         addSparseMap(img, pg);
 
         double t4 = omp_get_wtime();

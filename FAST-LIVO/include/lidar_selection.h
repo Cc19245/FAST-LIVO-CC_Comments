@@ -35,7 +35,10 @@ namespace lidar_selection
         float *patch_cache;
         float *patch_with_border_;
         int width, height, grid_n_width, grid_n_height, length;
-        SubSparseMap *sub_sparse_map;  //; 存储当前帧子地图的最终结果，主要就是和当前帧patch匹配的历史帧的patch
+
+        //; 存储当前帧子地图的最终结果，主要就是和当前帧patch匹配的历史帧的patch
+        SubSparseMap *sub_sparse_map;  
+
         double fx, fy, cx, cy;
         bool ncc_en;
         int debug, patch_size, patch_size_total, patch_size_half;
@@ -45,7 +48,7 @@ namespace lidar_selection
         float weight_scale_;
         double img_point_cov, outlier_threshold, ncc_thre;
         size_t n_meas_; //!< Number of measurements
-        deque<PointPtr> map_cur_frame_;
+        deque<PointPtr> map_cur_frame_;  //; 这个变量定义了实际没有使用
         deque<PointPtr> sub_map_cur_frame_;  //; 用于当前帧图像观测的LiDAR地图点
         double computeH, ekf_time;
         double ave_total = 0.01;
@@ -71,6 +74,7 @@ namespace lidar_selection
         void getpatch(cv::Mat img, V2D pc, float *patch_tmp, int level);
         void dpi(V3D p, MD(2, 3) & J);
         float UpdateState(cv::Mat img, float total_residual, int level);
+        //! ncc全称叫做 归一化互相关，具体用在slam里面有什么作用？
         double NCC(float *ref_patch, float *cur_patch, int patch_size);
 
         void ComputeJ(cv::Mat img);

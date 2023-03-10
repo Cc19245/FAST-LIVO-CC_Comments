@@ -47,6 +47,7 @@ public:
   Matrix<double, 6, 6>          Cov_;                   //!< Covariance.
   ImgPyr                        img_pyr_;               //!< Image Pyramid.
   Features                      fts_;                   //!< List of features in the image.
+  //; key_pts_是这帧图像选择的特征点？
   vector<FeaturePtr>              key_pts_;               //!< Five features and associated 3D points which are used to detect if two frames have overlapping field of view.
   bool                          is_keyframe_;           //!< Was this frames selected as keyframe
 

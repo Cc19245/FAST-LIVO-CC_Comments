@@ -31,7 +31,7 @@ namespace lidar_selection
 
     // 初始化Frame构造函数，传入id，相机模型，5个关键点，是否为关键帧，然后进行初始化
     Frame::Frame(vk::AbstractCamera *cam, const cv::Mat &img) : 
-        id_(frame_counter_++),
+        id_(frame_counter_++),  //; frame_id
         cam_(cam),
         key_pts_(5),
         is_keyframe_(false)
@@ -55,9 +55,10 @@ namespace lidar_selection
         // Set keypoints to nullptr
         std::for_each(key_pts_.begin(), key_pts_.end(), [&](FeaturePtr ftr)
                       { ftr = nullptr; });
-        // ImgPyr: vector<cv::Mat> 用swap交换到一个新的类型的vector,将原来的a拷贝出去，然后自然销毁，而新的到的a是全新的没有存任何数据的。
-        ImgPyr().swap(img_pyr_); 
-        img_pyr_.push_back(img);
+        // ImgPyr: vector<cv::Mat> 用swap交换到一个新的类型的vector,
+        // 将原来的a拷贝出去，然后自然销毁，而新的到的a是全新的没有存任何数据的。
+        ImgPyr().swap(img_pyr_);   //; 图像金字塔的值复位
+        img_pyr_.push_back(img);   //; 然后把当前帧的图像加到图像金字塔中，也就是图像金字塔的第0层
         // Build Image Pyramid
         // frame_utils::createImgPyramid(img, max(Config::nPyrLevels(), Config::kltMaxLevel()+1), img_pyr_);
         // frame_utils::createImgPyramid(img, 5, img_pyr_);
