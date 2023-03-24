@@ -57,10 +57,12 @@ namespace lidar_selection
         height = cam->height();
         grid_n_width = static_cast<int>(width / grid_size);   // 848/40
         grid_n_height = static_cast<int>(height / grid_size); // 480/40
-        length = grid_n_width * grid_n_height;
-        fx = cam->errorMultiplier2();
-        fy = cam->errorMultiplier() / (4. * fx);
+        length = grid_n_width * grid_n_height;   //; 划分成grid的总数
+        //! 疑问：这里为什么要这么操作？
+        fx = cam->errorMultiplier2();  //; abs(fx_)
+        fy = cam->errorMultiplier() / (4. * fx);  //; errorMultiplier返回是4*fx*fy
         grid_num = new int[length];
+
         map_index = new int[length];
         map_value = new float[length];
         align_flag = new int[length];
@@ -68,6 +70,7 @@ namespace lidar_selection
         memset(grid_num, TYPE_UNKNOWN, sizeof(int) * length);
         memset(map_index, 0, sizeof(int) * length);
         memset(map_value, 0, sizeof(float) * length);
+
         voxel_points_.reserve(length);
         add_voxel_points_.reserve(length);
         count_img = 0;
@@ -93,8 +96,9 @@ namespace lidar_selection
         fill_n(map_dist, length, 10000);
         //; 这里还是用swap函数，这样相当于对vector里面的内容进行清空，但是vector占用的
         //; 仍然是原来的内存，并不需要重新分配内存
-        std::vector<PointPtr>(length).swap(voxel_points_); // 此时voxel_points_和add_voxel_points是全新的，没有存任何数据
-        std::vector<V3D>(length).swap(add_voxel_points_);
+        // 此时 voxel_points_ 和 add_voxel_points 是全新的，没有存任何数据
+        std::vector<PointPtr>(length).swap(voxel_points_);  //; 本次找到的视觉地图中的点
+        std::vector<V3D>(length).swap(add_voxel_points_);   //; 当前帧往视觉地图中新加入的点
         voxel_points_.reserve(length);     //; 网格中存储的3D点，注意只有一个，就是深度最近的那个点
         add_voxel_points_.reserve(length);
     }
@@ -181,11 +185,12 @@ namespace lidar_selection
             {
                 int index = static_cast<int>(pc[0] / grid_size) * grid_n_height + static_cast<int>(pc[1] / grid_size);
                 // float cur_value = CheckGoodPoints(img, pc);
+
+                //; 计算这个lidar点对应的视觉特征点的 shiTomasi 得分，得分超过原先地图中的patch得分的话，加入这个点的观测
                 float cur_value = vk::shiTomasiScore(img, pc[0], pc[1]); // 计算角点评分，得分越高，则特征越优先
 
                 //! only add in not occupied grid
-                if (cur_value >
-                    map_value[index]) //&& (grid_num[index] != TYPE_MAP || map_value[index]<=10)) 
+                if (cur_value > map_value[index]) //&& (grid_num[index] != TYPE_MAP || map_value[index]<=10)) 
                 {
                     map_value[index] = cur_value;
                     add_voxel_points_[index] = pt;  //; 注意这里没有覆盖地图点，而是存到了一个新的变量里面
@@ -417,7 +422,7 @@ namespace lidar_selection
         cout << "1111111111111111111111: " << sizeof(float)*length << endl; // todo:???768
 
         // Step 0.2: 清空最终用到的子地图的值，这里面只存储了观测的patch等有用信息，而没有存储中间信息
-        sub_sparse_map->reset();
+        sub_sparse_map->reset();    //; reset是自定义函数，内部是把所有的成员变量都清空 
         deque<PointPtr>().swap(sub_map_cur_frame_);
 
         float voxel_size = 0.5;
@@ -429,6 +434,7 @@ namespace lidar_selection
         // float* it = (float*)depth_img.data;
         
         // std::cout << "h*w = " << height * width << std::endl;
+        //?bug: 这个地方如果按照下面C语言的写法有的数据集会报内存错误，这里改成std::vector就不会
         // float it[height * width] = {0.0};   //; 存储的图像中每个点的深度，这是后面对网格中的地图点检查深度连续性使用的
         std::vector<float> it(height*width, 0);
 
@@ -442,7 +448,7 @@ namespace lidar_selection
         /*  */
         double ts1 = omp_get_wtime();
         
-        // Step 1: 计算上一帧的LiDAR点云的体素坐标；并把点云投影到当前帧图像下，给图像的点赋值深度
+        // Step 1: 计算上一帧的 LiDAR 点云投影到当前帧图像下，给图像的点赋值深度，这是为了后面检查特征点深度连续性使用的
         for (int i = 0; i < pg_down->size(); i++)
         {
             // Transform Point to world coordinate
@@ -457,16 +463,19 @@ namespace lidar_selection
             VOXEL_KEY position(loc_xyz[0], loc_xyz[1], loc_xyz[2]);
 
             auto iter = sub_feat_map.find(position);
-            if (iter == sub_feat_map.end())
-            {                                 // 没找到position
+            if (iter == sub_feat_map.end())  // 没找到position
+            {                         
+                //; 感觉这里的表示的是 position 这个位置的体素在局部地图中，但是实际上从后面来看这里直接用set就可以，没必要用map
                 sub_feat_map[position] = 1.0; // 未查找到，返回一个指向sub_feat_map.end()的指针，则需要初始化
             }
 
+            //; 相机坐标系下的点
             V3D pt_c(new_frame_->w2f(pt_w)); // 世界坐标转换为相机frame
 
             V2D px;
             if (pt_c[2] > 0) // z > 0，也就是在相机的前面
             {
+                //TODO: 这里直接投影了，没有计算畸变系数，是否会有影响？
                 px[0] = fx * pt_c[0] / pt_c[2] + cx;
                 px[1] = fy * pt_c[1] / pt_c[2] + cy;
 
@@ -475,7 +484,7 @@ namespace lidar_selection
                     float depth = pt_c[2];
                     int col = int(px[0]);
                     int row = int(px[1]);
-                    //; 给图像中这个像素点的深度赋值为LiDAR点的值
+                    //; 给图像中这个像素点的深度赋值为LiDAR点的值，注意这里用的是上一帧LiDAR点云，因此应该不会有重复的点
                     it[width * row + col] = depth; // TODO：idx是如何定义的
                 }
             }
@@ -495,12 +504,13 @@ namespace lidar_selection
         // Step 2: 遍历上面找到的所有体素，把体素中的所有地图点都拿出来投影到图像上；然后划分网格，保留网格中深度最近的那个点
         for (auto &iter : sub_feat_map)
         {
-            VOXEL_KEY position = iter.first;
+            VOXEL_KEY position = iter.first;  //; 这个体素的哈希值
             double t4 = omp_get_wtime();
-            auto corre_voxel = feat_map.find(position);  //; 寻找体素坐标
+            auto corre_voxel = feat_map.find(position);  //; 哈希值对应的体素
             double t5 = omp_get_wtime();
 
-            if (corre_voxel != feat_map.end())
+            //; 如果这个体素存在于地图中，则把体素中的点全部投影到当前帧图像上，寻找可以使用的地图点
+            if (corre_voxel != feat_map.end())  
             {
                 //; 这个体素中的所有点
                 std::vector<PointPtr> &voxel_points = corre_voxel->second->voxel_points;
@@ -514,10 +524,10 @@ namespace lidar_selection
                     V3D pt_cam(new_frame_->w2f(pt->pos_));
                     if (pt_cam[2] < 0)
                         continue;
-                    //; 把这个点转到像素坐标系下
+                    //; 把这个点转到像素坐标系下，注意这个函数里面是考虑了相机的畸变的，因此是准确的
                     V2D pc(new_frame_->w2c(pt->pos_));
 
-                    FeaturePtr ref_ftr;
+                    // FeaturePtr ref_ftr;  // 这里其实没有使用这个变量，可以注释掉
 
                     // 20px is the patch size in the matcher
                     //; 如果像素点在相机的FoV内
@@ -533,6 +543,7 @@ namespace lidar_selection
                         Vector3d obs_vec(new_frame_->pos() - pt->pos_); // new_frame_->pos() return该帧在世界坐标系下的位姿 向量做差（3D点误差）
 
                         float cur_dist = obs_vec.norm(); // 向量范数，即差值模值
+                        //; value 是 shiTomasiScore，也就是角点的得分，得分越高，说明这个角点越明显
                         float cur_value = pt->value;     // TODO:value?
 
                         //; 这里就是论文中说的，为了防止遮挡，会选 40x40 的grid中像素最小的那个点
@@ -577,7 +588,7 @@ namespace lidar_selection
                 V2D pc(new_frame_->w2c(pt->pos_));     // world frame to camera pixel coordinates（2d）
                 V3D pt_cam(new_frame_->w2f(pt->pos_)); // world frame to camera frame
 
-                // Step 3.1: 判断点深度连续性
+                // Step 3.1: 判断点深度连续性，即当前点其周围8个patch像素的深度差别不应该太大
                 bool depth_continous = false;
                 for (int u = -patch_size_half; u <= patch_size_half; u++)
                 {
@@ -587,8 +598,7 @@ namespace lidar_selection
                             continue; // patch中心
 
                         // int col = int(px[0]);int row = int(px[1]);it[width*row+col] = depth;
-                        float depth = it[width * (v + int(pc[1])) + u +
-                                         int(pc[0])]; 
+                        float depth = it[width * (v + int(pc[1])) + u + int(pc[0])]; 
 
                         if (depth == 0.)
                             continue;
@@ -609,13 +619,11 @@ namespace lidar_selection
                 if (depth_continous)
                     continue;
 
-                //                t_2 += omp_get_wtime() - t_1;
-
                 t_1 = omp_get_wtime();
 
 
                 // Step 3.2: 寻找这个地图点的所有patch中，和当前的图像的观测角度最相近的那个patch
-                FeaturePtr ref_ftr;
+                FeaturePtr ref_ftr;  //; 这个就是当前帧图像匹配的地图中的 patch
 
                 // get frame with same point of view AND same pyramid level
                 //; 找到与当前图像的观察角度最接近的点作为参考，注意里面只用观测方向进行了判断
@@ -626,9 +634,10 @@ namespace lidar_selection
 
                 //; 这里 patch_size_total 是patch占用的所有像素，比如 8*8=64
                 //! 疑问： *3是干什么的？
-                float *patch_wrap = new float[patch_size_total * 3];
+                //; 解答：因为有图像金字塔，缩放两次，加上原始图像，所一共有3个wrap
+                float *patch_wrap = new float[patch_size_total * 3];  //; 地图中匹配的patch像素
 
-                patch_wrap = ref_ftr->patch;
+                patch_wrap = ref_ftr->patch;  //! 疑问：怎么又换了指向的方向了？
 
                 t_1 = omp_get_wtime();
 
@@ -638,21 +647,20 @@ namespace lidar_selection
                 // Step 3.3: 计算这个patch所在的图像帧和当前帧的图像像素之间的affine变换
                 //; 这个 ref_ftr->id_ 应该是这个patch所在的图像的id，因为对于一个图像来说和当前帧的affine变换应该是一样的
                 auto iter_warp = Warp_map.find(ref_ftr->id_);
-                if (iter_warp != Warp_map.end())
-                { // find sucessfully
-                    search_level = iter_warp->second->search_level;
+                if (iter_warp != Warp_map.end())  // find sucessfully
+                { 
+                    search_level = iter_warp->second->search_level;  //; 地图中这个 patch 对应图像和当前图像之间的 warp 的金字塔
                     A_cur_ref_zero = iter_warp->second->A_cur_ref;
                 }
                 else
                 {
-                    // 计算仿射矩阵 计算patch从参考帧投影到当前帧的仿射变换，因为要计算patch的相似度
+                    // 计算仿射矩阵 计算 patch 从参考帧投影到当前帧的仿射变换，因为要计算 patch 的相似度
                     getWarpMatrixAffine(*cam, ref_ftr->px, ref_ftr->f, (ref_ftr->pos() - pt->pos_).norm(),
                                         new_frame_->T_f_w_ * ref_ftr->T_f_w_.inverse(), 0, 0, patch_size_half,
                                         A_cur_ref_zero);
 
                     //; 判断到哪个层里面寻找像素对应关系
                     search_level = getBestSearchLevel(A_cur_ref_zero, 2); // 找到尺度相近的层
-
                     Warp *ot = new Warp(search_level, A_cur_ref_zero);
                     Warp_map[ref_ftr->id_] = ot; // 更新warp_map
                 }
@@ -665,15 +673,16 @@ namespace lidar_selection
                 for (int pyramid_level = 0; pyramid_level <= 0; pyramid_level++) // pyramid_level == 0
                 { 
                     //! 注意：这里算的是反向的warp，和深度估计里面差不多
+                    // 只对第0层实施仿射变换，可以得到亚像素级别的精度
                     warpAffine(A_cur_ref_zero, ref_ftr->img, ref_ftr->px, ref_ftr->level, 
-                               search_level, pyramid_level, patch_size_half, patch_wrap); // 只对第0层实施仿射变换，可以得到亚像素级别的精度
+                               search_level, pyramid_level, patch_size_half, patch_wrap); 
                 }
 
                 // Step 3.5: 对当前帧的图像取patch，得到patch中的像素值
-                getpatch(img, pc, patch_cache, 0);
+                getpatch(img, pc, patch_cache, 0);  //; 最后0表示原始图像，即没有使用图像金字塔
 
-                if (ncc_en)
-                { // false
+                if (ncc_en)  // false
+                { 
                     double ncc = NCC(patch_wrap, patch_cache, patch_size_total);
                     if (ncc < ncc_thre)
                         continue;
@@ -692,13 +701,13 @@ namespace lidar_selection
                     continue; // TODO：阈值：外点去除？
 
                 // Step 3.8: 收尾工作，当前点可以用，把所有的信息收集起来
-                sub_map_cur_frame_.push_back(pt);   //; 把这个LiDAR地图点存储起来
+                sub_map_cur_frame_.push_back(pt);   //; 把这个LiDAR地图点存储起来，实际上不是优化过程中用的
 
+                //; 把当前这个点加到视觉稀疏子地图中，视觉稀疏子地图才是后面真正要用的
                 sub_sparse_map->align_errors.push_back(error);
                 sub_sparse_map->propa_errors.push_back(error);
-                
                 sub_sparse_map->search_levels.push_back(search_level);  //; 这个地图点的patch要和当前帧的patch的哪个金字塔层匹配
-                sub_sparse_map->errors.push_back(error);  
+                sub_sparse_map->errors.push_back(error);     //; 历史上的所有误差？ 
                 sub_sparse_map->index.push_back(i);          //; 这个地图点落在图像中的哪个网格里
                 sub_sparse_map->voxel_points.push_back(pt);  //; 把这个LiDAR点存到子地图中
                 sub_sparse_map->patch.push_back(patch_wrap); //; 把这个LiDAR点对应的patch进行affine到当前帧之后的像素值存储下来
@@ -921,6 +930,7 @@ namespace lidar_selection
             n_meas_ = 0;
             M3D Rwi(state->rot_end);
             V3D Pwi(state->pos_end);
+            //; 根据IMU预测的位姿，计算当前帧图像在world系下的位置
             Rcw = Rci * Rwi.transpose();
             Pcw = -Rci * Rwi.transpose() * Pwi + Pci;
             Jdp_dt = Rci * Rwi.transpose();
@@ -940,14 +950,15 @@ namespace lidar_selection
 
                 if (pt == nullptr)
                     continue;
-
+                
+                //; 把地图点从 world 系投到当前帧 相机系
                 V3D pf = Rcw * pt->pos_ + Pcw; // pt: world frame; pf: camera frame
                 pc = cam->world2cam(pf);  //; pc是patch的中心点的像素坐标
                 // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                 {
-                    //; 十四讲 P200, (8.16), du/dq
+                    //; 十四讲 P220, (8.16), du/dq
                     dpi(pf, Jdpi);               // use pf(x,y,z) to return MD(2, 3) Jdpi
-                    //; 十四讲 P200, (8.17), dq/dT
+                    //; 十四讲 P220, (8.17), dq/dT
                     p_hat << SKEW_SYM_MATRX(pf); // 0.0, -pf[2], pf[1], pf[2], 0.0, -pf[0], -pf[1], pf[0], 0.0
                 }
                 const float u_ref = pc[0];
@@ -973,7 +984,7 @@ namespace lidar_selection
                     {
                         // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                         //{
-                        //; 这里就是对图像上的点进行线性插值，然后计算像素梯度
+                        //; 这里就是对当前帧图像上的点进行线性插值，然后计算像素梯度
                         float du = 0.5f * ((w_ref_tl * img_ptr[scale] + w_ref_tr * img_ptr[scale * 2] +
                                             w_ref_bl * img_ptr[scale * width + scale] +
                                             w_ref_br * img_ptr[scale * width + scale * 2]) -
@@ -1243,9 +1254,11 @@ namespace lidar_selection
         if (width != img.cols || height != img.rows)
         {
             // std::cout << "Resize the img scale !!!" << std::endl;
+            //! 疑问：这里scale为什么直接给了0.5?
             double scale = 0.5;
             cv::resize(img, img, cv::Size(img.cols * scale, img.rows * scale), 0, 0, CV_INTER_LINEAR);
         }
+        //; 这个是用于
         img_rgb = img.clone(); // 完全拷贝
         img_cp = img.clone();
         //! 疑问：为什么要进行颜色空间的转换？
@@ -1253,6 +1266,7 @@ namespace lidar_selection
         cv::cvtColor(img, img, CV_BGR2GRAY); // 图像从一个颜色空间转换到另一个颜色空间的转换 opencv default:BGR
 
         // Step 1: 使用相机模型和当前帧图像，构造一个图像帧，这个是在地图中维护的数据结构
+        //; 注意这里有clone
         new_frame_.reset(new Frame(cam, img.clone()));
         
         //; 利用IMU积分预测得到的当前IMU在world系下的位姿，然后得到当前时刻下 world系 在 相机系 下的位姿
@@ -1269,15 +1283,15 @@ namespace lidar_selection
 
         double t1 = omp_get_wtime();
 
-        // Step 2: 计算这个图像帧观测到的地图点的patch，这里面就计算了地图点的patch和当前帧的patch
-        // Step    之间的光度误差了
+        // Step 2: 计算这个图像帧观测到的地图点的patch，结果会存到成员变量的 sub_sparse_map 里面。
+        // 另外这里面就计算了地图点的patch和当前帧的patch之间的光度误差了，并且存到了 sub_sparse_map 里面
         addFromSparseMap(img, pg);
 
         double t3 = omp_get_wtime();
 
         // ADD required 3D points
-        // Step 3: 这里属于论文最后一步，也就是优化之后添加新的地图点到视觉地图中。但是由于新的地图点
-        // Step    和优化无关，所以这里提前添加也可以
+        // Step 3: 这里属于论文最后一步，也就是优化之后添加新的地图点到视觉地图中。
+        //         但是由于新的地图点和优化无关，所以这里提前添加也可以
         addSparseMap(img, pg);
 
         double t4 = omp_get_wtime();

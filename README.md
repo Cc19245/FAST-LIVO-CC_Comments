@@ -24,6 +24,12 @@
 
 
 
+## Note
+
+- 本仓库的环境链接库
+
+
+
 ## Acknowledgements
 
 - [FAST-LIVO](https://github.com/hku-mars/FAST-LIVO) 

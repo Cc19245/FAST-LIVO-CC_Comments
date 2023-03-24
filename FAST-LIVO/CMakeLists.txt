@@ -55,7 +55,7 @@ find_package(catkin REQUIRED COMPONENTS
   livox_ros_driver
   message_generation
   eigen_conversions
-  vikit_common
+  vikit_common  # 寻找vikit功能包，找到之后会自动包括其头文件的路径
   vikit_ros
   cv_bridge
   image_transport
@@ -100,18 +100,23 @@ catkin_package(
 
 # add_executable(loam_feat_extract src/feature_extract.cpp)
 # target_link_libraries(loam_feat_extract ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+#; ikdtree部分，最后我们应该不用
 add_library(ikdtree include/ikd-Tree/ikd_Tree.cpp
                     # include/ikd-Forest/ikd_Forest.cpp 
                     include/FOV_Checker/FOV_Checker.cpp
                     )
+
+#; VIO部分
 add_library(vio src/lidar_selection.cpp
                 src/frame.cpp
                 src/point.cpp
                 src/map.cpp
                 )
+
 add_executable(fastlivo_mapping src/laserMapping.cpp 
                                 src/IMU_Processing.cpp
-                                src/preprocess.cpp
+                                src/preprocess.cpp   # 这个地方是处理点云特征提取的
                                 )
 target_link_libraries(fastlivo_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} vio ikdtree)
 target_include_directories(fastlivo_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})

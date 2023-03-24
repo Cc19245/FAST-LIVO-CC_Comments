@@ -5,13 +5,14 @@ dense_map_enable : 1
 filter_size_surf : 0.5 # 0.3
 filter_size_map : 0.5 # 0.4
 cube_side_length : 20 
+
 debug : 1
 grid_size : 40
 patch_size : 8
 img_enable : 1
 lidar_enable : 1
 outlier_threshold : 50
-ncc_en: true
+ncc_en: true     # 这里使用了NCC
 ncc_thre: 0.5
 img_point_cov : 1000
 laser_point_cov : 0.001

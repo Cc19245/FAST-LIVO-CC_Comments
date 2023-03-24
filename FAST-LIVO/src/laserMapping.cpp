@@ -43,7 +43,7 @@
 #include <so3_math.h>
 #include <ros/ros.h>
 #include <Eigen/Core>
-// #include <common_lib.h>
+// #include <common_lib.h>   // SparseMap 所在的头文件
 #include <image_transport/image_transport.h>
 #include "IMU_Processing.h"
 #include <nav_msgs/Odometry.h>
@@ -966,8 +966,8 @@ void readParameters(ros::NodeHandle &nh)
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
     nh.param<vector<double>>("camera/Pcl", cameraextrinT, vector<double>()); // 相机雷达外参
     nh.param<vector<double>>("camera/Rcl", cameraextrinR, vector<double>());
-    nh.param<int>("grid_size", grid_size, 40);
-    nh.param<int>("patch_size", patch_size, 4);
+    nh.param<int>("grid_size", grid_size, 40);    // 每个网格的像素宽高，配置为 40
+    nh.param<int>("patch_size", patch_size, 4);   // 选择的 patch 的宽高，配置为 8
     nh.param<double>("outlier_threshold", outlier_threshold, 100);
     nh.param<double>("ncc_thre", ncc_thre, 100);
 }
@@ -1024,27 +1024,41 @@ int main(int argc, char **argv)
     extT << VEC_FROM_ARRAY(extrinT);
     extR << MAT_FROM_ARRAY(extrinR);
     Lidar_offset_to_IMU = extT;
-    lidar_selection::LidarSelectorPtr lidar_selector(new lidar_selection::LidarSelector(grid_size, new SparseMap));
+
+    //! 重要：处理VIO部分的类
+    lidar_selection::LidarSelectorPtr lidar_selector(
+        new lidar_selection::LidarSelector(grid_size, new SparseMap));
+    //; 从命名空间中读取参数，生成一个虚拟的相机类
     if (!vk::camera_loader::loadFromRosNs("laserMapping", lidar_selector->cam))
         throw std::runtime_error("Camera model not correctly specified.");
     // TODO：初始化lidar_selection的一些参数
+    //; 这个没用到
     lidar_selector->MIN_IMG_COUNT = MIN_IMG_COUNT;   // 1000
     lidar_selector->debug = debug;  // 0 是否显示debug信息
     lidar_selector->patch_size = patch_size;   // 8
     lidar_selector->outlier_threshold = outlier_threshold;  // 300
     lidar_selector->ncc_thre = ncc_thre;   // 0 ncc 的阈值
+    //; 进去内部看，应该是 T_camera_lidar?
     lidar_selector->sparse_map->set_camera2lidar(cameraextrinR, cameraextrinT); // hr: from camera to lidar
+    //; 传入的是 T_imu_lidar，内部赋值做了转换，变成 T_lidar_imu
     lidar_selector->set_extrinsic(extT, extR);  // hr: TODO:return T from imu to lidar
-    lidar_selector->state = &state;  //; 绑定状态变量，这样会在VIO里面直接更改LIO的结果
-    lidar_selector->state_propagat = &state_propagat;  //; IMU预测的状态，这和IEKF有关，因为IEKF会一直计算当前状态和预测状态之间的差值
-    lidar_selector->NUM_MAX_ITERATIONS = NUM_MAX_ITERATIONS; // 4
+    //; 绑定状态变量，这样会在VIO里面直接更改LIO的结果
+    lidar_selector->state = &state;  
+    //; IMU预测的状态，这和IEKF有关，因为IEKF会一直计算当前状态和预测状态之间的差值
+    lidar_selector->state_propagat = &state_propagat;  
+    lidar_selector->NUM_MAX_ITERATIONS = NUM_MAX_ITERATIONS; // 4，IEKF迭代的最大阈值
+    //; 和优化有关，视觉点的协方差
     lidar_selector->img_point_cov = IMG_POINT_COV; // 100
+    //; 给成员变量中的相机内参赋值
     lidar_selector->fx = cam_fx;
     lidar_selector->fy = cam_fy;
     lidar_selector->cx = cam_cx;
     lidar_selector->cy = cam_cy;
+    //; NCC是归一化相关性，是相比使用patch对齐的更复杂的差异度量方式，见十四讲P230
     lidar_selector->ncc_en = ncc_en; // 0
     lidar_selector->init();
+    //------------------------------- vio 部分变量初始化完毕 --------------------------
+
 
     //; 对IMU类设置噪声等消息
     p_imu->set_extrinsic(extT, extR); // TODO:lidar to imu??
@@ -1102,6 +1116,8 @@ int main(int argc, char **argv)
         match_time = kdtree_search_time = kdtree_search_counter = solve_time = solve_const_H_time = svd_time = 0;
         t0 = omp_get_wtime();
 
+        double time_start = t0;
+
         // Step 2: 利用IMU数据对状态变量进行积分递推，同时得到去畸变之后的LIDAR点云
         //! 疑问：里面的代码太乱，没有看懂如果当前帧是图像，到底有没有对点云进行去畸变
         //! 暂时解答：感觉应该是没有去畸变处理的，以为里面的操作如果是图像则点的时间都不满足要求，都不会去畸变
@@ -1155,8 +1171,12 @@ int main(int argc, char **argv)
 
                 /* visual main */
                 //! 重要：视觉VIO的主函数！
-                // 传入: 当前帧的图像 和 上一帧的LiDAR在世界坐标系下的点云
+                //; 传入: 当前帧的图像 和 上一帧的LiDAR在世界坐标系下的点云
                 lidar_selector->detect(LidarMeasures.measures.back().img, pcl_wait_pub); 
+
+                double time_end = omp_get_wtime();
+                std::cout << "-- vio time: " << (time_end - time_start) << std::endl;
+
                 // int size = lidar_selector->map_cur_frame_.size();
                 int size_sub = lidar_selector->sub_map_cur_frame_.size();
 
@@ -1478,6 +1498,10 @@ int main(int argc, char **argv)
 
         // SaveTrajTUM(LidarMeasures.lidar_beg_time, state.rot_end, state.pos_end);
         double t_update_end = omp_get_wtime();
+
+        double time_end = t_update_end;
+        std::cout << "LIO time: " << (time_end - time_start) << std::endl;
+
         /******* Publish odometry *******/
         euler_cur = RotMtoEuler(state.rot_end);
         geoQuat = tf::createQuaternionMsgFromRollPitchYaw(euler_cur(0), euler_cur(1), euler_cur(2));

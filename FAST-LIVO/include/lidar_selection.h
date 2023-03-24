@@ -28,12 +28,13 @@ namespace lidar_selection
         M3D Rli, Rci, Rcw, Jdphi_dR, Jdp_dt, Jdp_dR;
         V3D Pli, Pci, Pcw;
         int *align_flag;
-        int *grid_num;
+        int *grid_num;      //; 网格里面存储的3D点的类型，如果没有点是UNKNOWN，地图点是TYPE_MAP，
         int *map_index;
-        float *map_dist;
-        float *map_value;
-        float *patch_cache;
+        float *map_dist;    //; 网格中深度最近的点的深度，是在for循环遍历中不断变小的值
+        float *map_value;   //; 网格中角点的 shiTomasiScore 得分的最大值，是在for循环遍历中不断变大的值
+        float *patch_cache; //; 当前帧图像中的某个图像点周围的patch像素，每个点都不一样
         float *patch_with_border_;
+        //; 图像宽，图像高，划分网格之后横向有几个网格，划分网格只有纵向有几个网格，网格的总数
         int width, height, grid_n_width, grid_n_height, length;
 
         //; 存储当前帧子地图的最终结果，主要就是和当前帧patch匹配的历史帧的patch
@@ -48,8 +49,8 @@ namespace lidar_selection
         float weight_scale_;
         double img_point_cov, outlier_threshold, ncc_thre;
         size_t n_meas_; //!< Number of measurements
-        deque<PointPtr> map_cur_frame_;  //; 这个变量定义了实际没有使用
-        deque<PointPtr> sub_map_cur_frame_;  //; 用于当前帧图像观测的LiDAR地图点
+        deque<PointPtr> map_cur_frame_;      //; 这个变量定义了实际没有使用
+        deque<PointPtr> sub_map_cur_frame_;  //; 当前帧最终用到的地图点
         double computeH, ekf_time;
         double ave_total = 0.01;
         int frame_cont = 1;
@@ -122,12 +123,13 @@ namespace lidar_selection
         pcl::VoxelGrid<PointType> downSizeFilter;
         unordered_map<VOXEL_KEY, VOXEL_POINTS *> feat_map;  //; 这个feat_map就是整个视觉地图，通过hash_key索引对应的体素
         unordered_map<VOXEL_KEY, float> sub_feat_map; //; 当前帧图像用到的子地图，每次都会重新构造
-        unordered_map<int, Warp *> Warp_map;  //; 当前帧图像对应的patch的图像id，和这个图像跟当前帧图像之间的affine变换，每次都会重新构造
+        //; 当前帧图像找到的地图点patch所在图像id，和这个图像跟当前帧图像之间的affine变换，每次都会重新构造
+        unordered_map<int, Warp *> Warp_map; 
 
         vector<VOXEL_KEY> occupy_postions;
         set<VOXEL_KEY> sub_postion;
-        vector<PointPtr> voxel_points_;   //; 当前帧图像用到的子地图的3D点，每次都会重新构造
-        vector<V3D> add_voxel_points_;  //; 当前帧图像加入的新的地图点，每次都会重新构造
+        vector<PointPtr> voxel_points_;   //; 当前帧图像用到的子地图的3D点，是网格中深度最近的那个点，每次都会重新构造
+        vector<V3D> add_voxel_points_;    //; 当前帧图像加入的新的地图点，是前帧图像新观测到的patch，每次都会重新构造
 
         cv::Mat img_cp, img_rgb;
         std::vector<FramePtr> overlap_kfs_;
